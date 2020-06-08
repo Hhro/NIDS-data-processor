@@ -87,7 +87,7 @@ def process_pcap(pcap_path, writers, mtu=1500):
     np.save(writers[2], pcap_numpy)
 
     # Troulbeshooting for 'This event loop is ...'
-    pkts.eventloop.close()
+    pkts.close()
 
     end_time = time.time()
     print("\tEnd at: {}".format(time.ctime()))
