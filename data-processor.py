@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import pyshark
+import shutil
 import csv
 import time
 import numpy as np
@@ -11,13 +12,14 @@ sess_next = 1
 packet_cnt = 1
 
 
-def process_pcap(pcap_path, writers, mtu=1500):
+def process_pcap(pcap_path, output_dir_path, writers, mtu=1500):
     '''
     Description: Process pcap file into 'labels.csv', 'sess.csv' and 'pkts.npy'
 
     Args:
     @pcap_path: Path instance of pcap path
-    @writers: Output writers of 'labels.csv', 'sess.csv', and 'pkts.npy'
+    @output_dir_path: Path instance of output directory
+    @writers: Output writers of 'labels.csv' and 'sess.csv'
     @mtu: maximum transmission unit (default=1500)
     '''
 
@@ -76,16 +78,16 @@ def process_pcap(pcap_path, writers, mtu=1500):
             writers[1].writerow(
                 [pkt_sess_id, pkt_src_ip, pkt_src_port, pkt_dst_ip, pkt_dst_port])
 
-        # Append labeld packet data to 'labels.csv'
+        # Append labeled packet data to 'labels.csv'
         writers[0].writerow([pkt_id, pkt_sess_id, pkt_length, pkt_label])
 
         pkts_array.add(np.frombuffer(pkt.get_raw_packet(), dtype=np.uint8))
 
-        # quit()
         packet_cnt += 1
 
-    # Save pcap numpy array into pkts.npy*
-    np.save(writers[2], pkts_array.finalize())
+    # Save(append) pcap numpy array into [label].npy
+    npy_writer = (output_dir_path / (label + ".npy")).open("ab")
+    np.save(npy_writer, pkts_array.finalize())
 
     # Troulbeshooting for 'This event loop is ...'
     pkts.close()
@@ -100,13 +102,12 @@ def process_pcaps(pcap_dir_path, output_dir_path, writers, mtu=1500):
     '''
     Description:
         Process pcaps included in 'pcap_dir_path' recursively.
-        Each pcap would generate its own 'pkts.npy.*' and
-        every 'pkts.npy.*' would merge into 'pkts.npy' at the end.
+        Each pcap would generate its own '[label].npy'
 
     Args:
     @pcap_dir_path: Path instance of pcap directory
     @output_dir_path: Path instance of output directory
-    @writers: Output writers of 'labels.csv', 'sess.csv', and 'pkts.npy'
+    @writers: Output writers of 'labels.csv' and 'sess.csv'
     @mtu: maximum transmission unit(default=1500)
     '''
 
@@ -122,15 +123,9 @@ def process_pcaps(pcap_dir_path, output_dir_path, writers, mtu=1500):
                                                      total_pcap_sz >> 30))
     print("Start at: {}".format(time.ctime()))
 
-    # Replace writer of 'pkts.npy' with 'pkts.npy.*'
-    for idx, path in enumerate(pcap_paths):
-        tmp_npy_writer = (output_dir_path /
-                          "pkts.npy.{}".format(idx)).open("wb")
-        tmp_writers = writers[:2] + [tmp_npy_writer]
-        process_pcap(path, tmp_writers, mtu)
-
-    # Merge splitted npys('pkts.npy.*') into result one('pkts.npy').
-    merge_npys(output_dir_path, writers[2])
+    # Process each pcap
+    for path in pcap_paths:
+        process_pcap(path, output_dir_path, writers, mtu)
 
     print("Total packet counts: {}".format(packet_cnt-1))
     print("Total session counts: {}".format(sess_next-1))
@@ -139,33 +134,6 @@ def process_pcaps(pcap_dir_path, output_dir_path, writers, mtu=1500):
     print("End at: {}".format(time.ctime()))
     print("Elapsed time: {}\n".format(time.strftime(
         "%H:%M:%S", time.gmtime(end_time-start_time))))
-
-
-def merge_npys(output_dir_path, npy_writer):
-    '''
-    Description: Merge splitted 'pkts.npy.*' into 'pkts.npy'
-
-    Args:
-
-    @output_dir_path: Path instance of output directory
-    @npy_writer: Output writer of 'pkts.npy'
-    '''
-
-    res = np.empty((0, 1500), dtype=np.uint8)
-
-    # Gather pkts.npy.*
-    npys_path = list(output_dir_path.glob("pkts.npy.*"))
-    npys_path.sort(key=lambda k: int(str(k)[str(k).find('npy.')+4:]))
-
-    print("\t[+]Merge pkts.npy*(s) into pkts.npy")
-
-    # Do merge & remove splitted
-    for path in npys_path:
-        res = np.append(res, np.load(path.open("rb")), axis=0)
-        path.unlink()
-
-    np.save(npy_writer, res)
-    print("\tMerging succeeds\n")
 
 
 if __name__ == "__main__":
@@ -187,16 +155,20 @@ if __name__ == "__main__":
     pcap_dir_path = ''
 
     output_dir_path = Path(args.output).resolve()
+
+    # Clean output directory
+    if output_dir_path.exists():
+        shutil.rmtree(str(output_dir_path))
+
     output_dir_path.mkdir(parents=True, exist_ok=True)
     output_paths = [output_dir_path / "labels.csv",
                     output_dir_path / "sess.csv",
-                    output_dir_path / "pkts.npy"]
+                    ]
 
     # Initialize IO variables
     writers = []
     writers.append(csv.writer(output_paths[0].open("w")))
     writers.append(csv.writer(output_paths[1].open("w")))
-    writers.append(output_paths[2].open("wb"))
 
     # One of pcap or pcap_dir is required
     if not args.pcap and not args.pcap_dir:
@@ -210,7 +182,7 @@ if __name__ == "__main__":
             print("[!] Pcap '{}' is not exist".format(str(pcap_path)))
             quit()
 
-        process_pcap(pcap_path, writers, mtu)
+        process_pcap(pcap_path, output_dir_path, writers, mtu)
 
     # Process every pcaps included in pcap_dir recursively
     elif args.pcap_dir:
