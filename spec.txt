@@ -1,0 +1,18 @@
+1. 각 Packet의 Session ID와 길이를 저장하는 csv 파일
+예)
+PacketID, SessionID, PacketLength, Label
+0, 0, 160
+1, 1, 240
+2, 2, 180
+3, 1, 244
+4, 0, 128
+...
+2. 각 Packet의 실제 데이터를 저장하는 numpy array (각 행이 하나의 Packet을 표현)
+- shape : (# Packet ID, MTU)
+- dtype : np.int8
+* MTU 길이 되지 않으면 zero padding 할 것 (논문에서 그렇게 제시되어 있음)
+* .npy 포맷으로 save 한 다음 압축해서 전달해주세요
+
+3. SessionID, SrcIP, DstIP, SrcPort, DstPort 를 포함한 csv
+0, 1.1.1.1, 2.2.2.2, 12345, 80
+...
