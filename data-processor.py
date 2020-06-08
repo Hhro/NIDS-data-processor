@@ -5,13 +5,14 @@ import csv
 import time
 import numpy as np
 from pathlib import Path
+from packet_array import PktArray
 
 sess_next = 1
 packet_cnt = 1
 
 
 def process_pcap(pcap_path, writers, mtu=1500):
-    ''' 
+    '''
     Description: Process pcap file into 'labels.csv', 'sess.csv' and 'pkts.npy'
 
     Args:
@@ -37,9 +38,9 @@ def process_pcap(pcap_path, writers, mtu=1500):
     if "-" in label:
         label = label[:label.index("-")]
 
-    # Empty pcap-numpy array and session map
+    # Empty pkt array and session map
     # sessions = {pkt.tcp.stream: session_number}
-    pcap_numpy = np.empty((0, mtu), dtype=np.uint8)
+    pkts_array = PktArray(mtu)
     sessions = {}
 
     # keep_packets=False : prevent memory leak
@@ -78,13 +79,13 @@ def process_pcap(pcap_path, writers, mtu=1500):
         # Append labeld packet data to 'labels.csv'
         writers[0].writerow([pkt_id, pkt_sess_id, pkt_length, pkt_label])
 
-        # Append pcap raw-data to pcap_numpy
-        pcap_numpy = np.append(pcap_numpy, np.frombuffer(
-            pkt.get_raw_packet().ljust(mtu, b'\x00'), dtype=np.uint8, count=mtu).reshape(1, 1500), axis=0)
+        pkts_array.add(np.frombuffer(pkt.get_raw_packet(), dtype=np.uint8))
+
+        # quit()
         packet_cnt += 1
 
-    # Save pcap numpy into pkts.npy*
-    np.save(writers[2], pcap_numpy)
+    # Save pcap numpy array into pkts.npy*
+    np.save(writers[2], pkts_array.finalize())
 
     # Troulbeshooting for 'This event loop is ...'
     pkts.close()
@@ -96,17 +97,17 @@ def process_pcap(pcap_path, writers, mtu=1500):
 
 
 def process_pcaps(pcap_dir_path, output_dir_path, writers, mtu=1500):
-    ''' 
-    Description: 
+    '''
+    Description:
         Process pcaps included in 'pcap_dir_path' recursively.
-        Each pcap would generate its own 'pkts.npy.*' and 
+        Each pcap would generate its own 'pkts.npy.*' and
         every 'pkts.npy.*' would merge into 'pkts.npy' at the end.
 
     Args:
     @pcap_dir_path: Path instance of pcap directory
     @output_dir_path: Path instance of output directory
     @writers: Output writers of 'labels.csv', 'sess.csv', and 'pkts.npy'
-    @mtu: maximum transmission unit (default=1500)
+    @mtu: maximum transmission unit(default=1500)
     '''
 
     # Gather pcaps
@@ -141,10 +142,11 @@ def process_pcaps(pcap_dir_path, output_dir_path, writers, mtu=1500):
 
 
 def merge_npys(output_dir_path, npy_writer):
-    ''' 
+    '''
     Description: Merge splitted 'pkts.npy.*' into 'pkts.npy'
 
     Args:
+
     @output_dir_path: Path instance of output directory
     @npy_writer: Output writer of 'pkts.npy'
     '''
