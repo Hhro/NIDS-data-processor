@@ -45,6 +45,16 @@ def process_pcap(pcap_path, output_dir_path, writers, mtu=1500):
     pkts_array = PktArray(mtu)
     sessions = {}
 
+    # Check if there is preceded data
+    if (output_dir_path / (label + ".npy")).exists():
+        base_npy_reader = (output_dir_path / (label + ".npy")).open("rb")
+        base_npys = np.load(base_npy_reader)
+
+        for base_npy in base_npys:
+            pkts_array.add(base_npy)
+
+        base_npy_reader.close()
+
     # keep_packets=False : prevent memory leak
     # include_raw=True : raw packet data would be appended to pcap_numpy
     pkts = pyshark.FileCapture(
@@ -86,8 +96,9 @@ def process_pcap(pcap_path, output_dir_path, writers, mtu=1500):
         packet_cnt += 1
 
     # Save(append) pcap numpy array into [label].npy
-    npy_writer = (output_dir_path / (label + ".npy")).open("ab")
+    npy_writer = (output_dir_path / (label + ".npy")).open("wb")
     np.save(npy_writer, pkts_array.finalize())
+    npy_writer.close()
 
     # Troulbeshooting for 'This event loop is ...'
     pkts.close()
@@ -112,7 +123,7 @@ def process_pcaps(pcap_dir_path, output_dir_path, writers, mtu=1500):
     '''
 
     # Gather pcaps
-    pcap_paths = list(pcap_dir_path.glob("**/*.pcap"))
+    pcap_paths = sorted(list(pcap_dir_path.glob("**/*.pcap")))
 
     # Perf & brief info
     start_time = time.time()

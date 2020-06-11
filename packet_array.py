@@ -14,7 +14,7 @@ class PktArray:
     def add(self, x):
         if self.size == self.capacity:
             self.capacity *= 4
-            newdata = np.zeros((self.capacity, self.mtu))
+            newdata = np.zeros((self.capacity, self.mtu), dtype=np.uint8)
             newdata[:self.size] = self.data
             self.data = newdata
 
